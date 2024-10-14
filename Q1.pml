@@ -1,54 +1,31 @@
-#define N 3 // Number of processes, can be changed as needed
+bool turn, flag[2];
+byte numCriticalProcesses; // counter for the number of processes currently in critical section
 
-byte pos[N]; // Array representing each process's stage
-byte step[N-1]; // Array representing the last process at each stage
+// ltl {[](numCriticalProcesses != 2)} // property 1 (safety)
+// ltl liveness1 { [](flag[0] == 1 -> <> (numCriticalProcesses == 1 && _pid == 0)) } // If process 0 is waiting, eventually it will enter the critical section
+ltl liveness2 { [](flag[1] == 1 -> <> (numCriticalProcesses == 1 && _pid == 1)) } // If process 1 is waiting, eventually it will enter the critical section
 
-active [N] proctype PetersonProcess() {
-    byte i = _pid; // Current process ID
-    
-    // Initialization
-    pos[i] = 0;
+active[2] proctype P1() { // active creates instances of processes, [2] means 2 processes
+    assert (_pid == 0 || _pid == 1); // make sure that there are only 2 processes, and that their identifiers are 0 and 1
 
-    // Multi-stage mutual exclusion control
-    int j;
     do
-    :: for (j : 0 .. N-2) {
-            pos[i] = j; // Record the current stage of process i
-            step[j] = i; // Record that process i is the last to reach stage j
+    :: flag[_pid] = 1;
+       turn = 1 - _pid;
 
-            // Wait until allowed to proceed to the next stage
-            do
-            :: {
-                int k;
-                bool proceed = true;
+       // Wait until the other process is not in critical section or it is this process's turn
+       do
+       :: (flag[1 - _pid] == 0 || turn == _pid) -> break
+       od;
 
-                // Check if any other process is at or beyond the current stage
-                for (k : 0 .. N-1) {
-                    if
-                    :: (k != i && pos[k] >= j) -> proceed = false; break;
-                    :: else -> skip;
-                    fi;
-                }
+       numCriticalProcesses++;
+       assert(numCriticalProcesses <= 1); // Ensure mutual exclusion before entering critical section
 
-                // Check if any other process is the last at the current stage
-                for (k : 0 .. N-1) {
-                    if
-                    :: (step[j] == k && k != i) -> proceed = false; break;
-                    :: else -> skip;
-                    fi;
-                }
+       // Critical Section
+       printf("Process %d is in the Critical Section\n", _pid);
+       
+       numCriticalProcesses--;
 
-                // Debugging output to check the current state of proceed
-                printf("Process %d, stage %d, proceed: %d\n", i, j, proceed);
-
-                // If both checks pass, proceed
-                if
-                :: proceed -> break;
-                :: else -> skip;
-                fi;
-            }
-            od;
-       }    
-    od;
+       // Exit critical section
+       flag[_pid] = 0;
+    od
 }
-
